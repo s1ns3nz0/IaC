@@ -295,16 +295,23 @@ resource "aws_instance" "app" {
 |Creation guard|`if _instance is None` | DynamoDB lock table|
 |Global access point|`DatabaseConnection()`|`terraform_remote_state` data source`|
 |Shared by everyone|All callers get same object|All engineers share same state|
+---
 # 3. Factory Pattern
 ## 1) What it is?
 - The Factory Pattern provides a single interface for creating objects, while hiding the creation logic from the caller.
 - The caller says "I need a server" - it doesn't need to know how that server is build, what its space are, or what steps are involved
 - Think of it like a car factory - you order a sedan or an SUV, and the factory handles all the internal assembly
 ## 2) How it works?
+### Definitions
 - Factory: Decides WHICH object to create
 - Product: The object being created (Webserver, etc.)
 - Client: Asks for an object, never builds it itself
 - In terrafornm a module acts as the Factory, The root (`main.tf`) is the Client - it simply says "give me a web server" by calling the module, and the module handles all the internal resource creation
+### Characteristics
+- Most of Factory modules contains attributes conversios or dynamic creations
+- Adding attributes coversions get resource configurations more complicated
+- Create similar infrastructure that has a bit differences about name, size and attributes
+- Lots of constants and less varialbes help to keep input values and verifying costs
 ### Software Code
 ```
 from abc import ABC, abstractmethod
@@ -374,7 +381,9 @@ web.describe()    # [Web]   cpu=2   mem=4GB   type=t3.medium
 db.describe()     # [DB]    cpu=8   mem=32GB  type=r5.2xlarge
 cache.describe()  # [Cache] cpu=4   mem=16GB  type=m5.xlarge
 ```
-## 5) Summary
+## 5) Terraform Design Example
+- Please refer 'Composite Pattern of Terraform' directory
+## 6) Summary
 | Concept | Python | Terraform |
 |-----|-----|------|
 |Factory|`ServerFactory.create()`|`modules/server/main.tf`|
@@ -382,4 +391,289 @@ cache.describe()  # [Cache] cpu=4   mem=16GB  type=m5.xlarge
 |Client|Code calling `factory.crate()`|Roof `main.tf`|
 |Hidden logic|`self.cpu`, `self.memory`|`instance_type`, `volume_size`|
 |Caller knows|Only the type(`"web"`)|Only `server_type="web"`|
+### Diagram
 ![](terraform_factory_pattern.svg)
+---
+# 4. Prototype
+## 1) What it is?
+- The prototype pattern creates new objects by cloing an exsiting object(called the prototype) rather than building one from scratch.
+- Instead of calling a constructor and setting evdery property manually.
+- You take a working object, copy it, and tweak only the parts that need to change
+### Cell Dividing
+- A new cell doesn't build itself from nothing, it copies its parent and then differentiates slightly.
+- A stamp - you carve the design once, then press it as many times as you need, with small variations each time
+## 2) How it works?
+- A prototype object is defined once, fully configured
+- New objects are created by CLONING the prototype
+- Only the differing properties are changed after cloning
+- The original prototype is never modified
+- Clones are fully independent from each other
+### Roles
+- Prototype: the orignal, fully configured object serves as the template
+- Clone: a copy of the prototype with small modifications applied
+- Clent: asks for a clone and applies its own overrides
+---
+## 3) Software Design Example
+- The base server is never modified.
+- Every clone starts from the same solid foundation and diverges only where needed
+```
+import copy
+
+# ─── The Prototype base class ─────────────────────────────────
+class Server:
+    def __init__(self, name, instance_type, region, tags, storage_gb):
+        self.name          = name
+        self.instance_type = instance_type
+        self.region        = region
+        self.tags          = tags
+        self.storage_gb    = storage_gb
+
+    def clone(self):
+        # Deep copy so nested objects (like tags dict) are fully independent
+        return copy.deepcopy(self)
+
+    def describe(self):
+        print(
+            f"[{self.name}] type={self.instance_type} "
+            f"region={self.region} storage={self.storage_gb}GB "
+            f"tags={self.tags}"
+        )
+```
+---
+```
+# ─── Step 1: Define the prototype once ───────────────────────
+# This is the fully configured "master" object.
+base_server = Server(
+    name          = "base",
+    instance_type = "t3.medium",
+    region        = "ap-northeast-2",
+    tags          = {"env": "dev", "team": "platform"},
+    storage_gb    = 20
+)
+```
+---
+```
+# ─── Step 2: Clone and tweak ─────────────────────────────────
+# Web server: clone base, change only name + tag
+web_server = base_server.clone()
+web_server.name       = "web-server-1"
+web_server.tags["role"] = "web"
+
+# DB server: clone base, change instance type + storage
+db_server = base_server.clone()
+db_server.name          = "db-server-1"
+db_server.instance_type = "r5.2xlarge"
+db_server.storage_gb    = 100
+db_server.tags["role"]  = "db"
+
+# Staging server: clone web, change only environment tag
+staging_server = web_server.clone()
+staging_server.name          = "web-server-staging"
+staging_server.tags["env"]   = "staging"
+```
+---
+```
+# ─── Step 3: Use all clones ───────────────────────────────────
+base_server.describe()
+# [base]             type=t3.medium   region=ap-northeast-2 storage=20GB
+web_server.describe()
+# [web-server-1]     type=t3.medium   region=ap-northeast-2 storage=20GB
+db_server.describe()
+# [db-server-1]      type=r5.2xlarge  region=ap-northeast-2 storage=100GB
+staging_server.describe()
+# [web-server-staging] type=t3.medium region=ap-northeast-2 storage=20GB
+```
+---
+```
+# ─── Prove clones are fully independent ───────────────────────
+print(base_server.instance_type)    # t3.medium  ← prototype unchanged
+print(db_server.instance_type)      # r5.2xlarge ← clone changed independently
+```
+## 4) Terraform Design Example
+- The prototype pattern is exposed through `for_each` with a local map
+- You define one `prototype` configuration block, then stamp out as many clones as needed - each with small overrides - without repeating the full resource definition
+## 5) Summary
+### Terraform Structure
+- The client(`main.tf`) at the top reads the prototype registry via `for_each`.
+- The base prototype(`locals.tf`) sits in the middle as the single source of truth
+- It is fully configured and never touched directly.
+- Each clone is produced by `merge()` whici is Terraform's equivalent of Python's `.clone()`
+- It copies everything from the base and applies only listed overrides.
+- Finally `for_each` stamps out one real `aws_instance` per clone
+### Conclusion
+- Server configurations often contain multiple hardcoded values, such as OS type and instance type
+- Variables can be explicitly declared in prototype modules to avoid confusion
+- Modules help variables evolve and integrate with other modules over time
+- The prototype becomes a well-defined, static variable that represents a resource configuration
+- The prototype pattern makes it easy to creates standard resources and configurations, while eliminating uncertainty in how input values are handled - because every clone inherits a fully defined and only overrides what is explicitly needed
+---
+# 5. Builder
+## 1) What it is?
+- The Builder Pattern seperates the construction of a complex object from its representation.
+- Instead of passing all parameters at once to a constructor, you build the object step by step, adding one piece at time through a fluent, readable chian of method calls.
+- Think of it like ordering a custom burger-you don't hand the chef a complete specification all at once.
+- You say: add a bun, add a patty, add cheese, add lettuce
+## 2) How It Works?
+### Componenets
+- Builder: Holds construction steps as chainable methods
+- Direcotr: Orchestrates the ORDER of steps
+- Product: The final, fully assembled object
+- Client: Chooses which steps to call and in what order
+### Characteristics
+- Each step is independent: calling one step does not force another
+- Steps are optional: you only call the ones you need
+- The order of steps matters - just like assembling furniture
+- The same builder can produce different representations depending on which steps are called
+## 3) Software Design Example
+```
+# ─── The Product ──────────────────────────────────────────────
+class Server:
+    def __init__(self):
+        self.instance_type = None
+        self.region        = None
+        self.storage_gb    = None
+        self.has_monitoring = False
+        self.has_backup     = False
+        self.tags           = {}
+
+    def describe(self):
+        print(
+            f"instance_type  : {self.instance_type}\n"
+            f"region         : {self.region}\n"
+            f"storage_gb     : {self.storage_gb}\n"
+            f"has_monitoring : {self.has_monitoring}\n"
+            f"has_backup     : {self.has_backup}\n"
+            f"tags           : {self.tags}\n"
+        )
+
+
+# ─── The Builder ─────────────────────────────────────────────
+class ServerBuilder:
+    def __init__(self):
+        self._server = Server()    # Starts with an empty product
+
+    # Each method adds ONE piece and returns self → enables chaining
+    def set_instance_type(self, instance_type: str):
+        self._server.instance_type = instance_type
+        return self                # ← key: returns self for chaining
+
+    def set_region(self, region: str):
+        self._server.region = region
+        return self
+
+    def set_storage(self, storage_gb: int):
+        self._server.storage_gb = storage_gb
+        return self
+
+    def enable_monitoring(self):
+        self._server.has_monitoring = True
+        return self
+
+    def enable_backup(self):
+        self._server.has_backup = True
+        return self
+
+    def add_tag(self, key: str, value: str):
+        self._server.tags[key] = value
+        return self
+
+    def build(self) -> Server:
+        return self._server        # ← delivers the finished product
+
+
+# ─── The Director ────────────────────────────────────────────
+# Encodes standard "recipes" — a known sequence of steps
+class ServerDirector:
+    def __init__(self, builder: ServerBuilder):
+        self._builder = builder
+
+    def build_web_server(self) -> Server:
+        return (
+            self._builder
+                .set_instance_type("t3.medium")
+                .set_region("ap-northeast-2")
+                .set_storage(20)
+                .enable_monitoring()
+                .add_tag("role", "web")
+                .build()
+        )
+
+    def build_db_server(self) -> Server:
+        return (
+            self._builder
+                .set_instance_type("r5.2xlarge")
+                .set_region("ap-northeast-2")
+                .set_storage(100)
+                .enable_monitoring()
+                .enable_backup()           # ← DB needs backup; web does not
+                .add_tag("role", "db")
+                .build()
+        )
+
+
+# ─── Client code ─────────────────────────────────────────────
+
+# Option A: Use the Director for standard recipes
+builder  = ServerBuilder()
+director = ServerDirector(builder)
+
+web = director.build_web_server()
+web.describe()
+# instance_type  : t3.medium
+# region         : ap-northeast-2
+# storage_gb     : 20
+# has_monitoring : True
+# has_backup     : False
+```
+---
+```
+# Option B: Build a custom server manually — no Director needed
+custom = (
+    ServerBuilder()
+        .set_instance_type("m5.xlarge")
+        .set_region("us-east-1")
+        .set_storage(50)
+        .enable_backup()
+        .add_tag("role", "cache")
+        .add_tag("env", "prod")
+        .build()
+)
+custom.describe()
+# instance_type  : m5.xlarge
+# region         : us-east-1
+# storage_gb     : 50
+# has_monitoring : False   ← not called, so not enabled
+# has_backup     : True
+```
+
+**Key observation:** The builder never forces you to call every step. `has_monitoring` stays `False` on the custom server simply because `.enable_monitoring()` was not called. Each step is truly optional and independent.
+
+---
+
+### 4. Terraform Design Example
+
+- In Terraform, the Builder Pattern maps to layered module composition — each layer adds one concern at a time, independently and in a deliberate order. 
+- The "build steps" are separate resource blocks or sub-modules that are assembled together by a top-level module acting as the Director.
+
+#### Directory Structure
+```
+project/
+├── main.tf                        ← Client + Director
+├── modules/
+│   └── server_builder/
+│       ├── main.tf                ← Builder (assembles steps)
+│       ├── variables.tf
+│       ├── outputs.tf
+│       └── steps/
+│           ├── compute/           ← Step: set_instance_type + set_storage
+│           │   ├── main.tf
+│           │   └── variables.tf
+│           ├── monitoring/        ← Step: enable_monitoring
+│           │   ├── main.tf
+│           │   └── variables.tf
+│           └── backup/            ← Step: enable_backup
+│               ├── main.tf
+│               └── variables.tf
+```
+#### Diagram
+![](terraform_builder_pattern.svg)
