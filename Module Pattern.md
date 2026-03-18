@@ -163,7 +163,7 @@ elif item is Folder:
 - Uniform interface → inputs/outputs(Implicit)
 ![](terraform_composite_pattern.svg)
 ### Example
-- Please refer 'Composite Pattern of Terraform' directory
+- Please refer 'Composite_Terraform' directory
 ---
 # 2. Singleton Pattern
 ## 1) What it is?
@@ -382,7 +382,7 @@ db.describe()     # [DB]    cpu=8   mem=32GB  type=r5.2xlarge
 cache.describe()  # [Cache] cpu=4   mem=16GB  type=m5.xlarge
 ```
 ## 5) Terraform Design Example
-- Please refer 'Composite Pattern of Terraform' directory
+- Please refer 'Factory_Pattern' directory
 ## 6) Summary
 | Concept | Python | Terraform |
 |-----|-----|------|
@@ -492,6 +492,7 @@ print(db_server.instance_type)      # r5.2xlarge ← clone changed independently
 ## 4) Terraform Design Example
 - The prototype pattern is exposed through `for_each` with a local map
 - You define one `prototype` configuration block, then stamp out as many clones as needed - each with small overrides - without repeating the full resource definition
+- - Please refer 'PrototypeTerraform' directory
 ## 5) Summary
 ### Terraform Structure
 - The client(`main.tf`) at the top reads the prototype registry via `for_each`.
@@ -651,7 +652,7 @@ custom.describe()
 ---
 
 ### 4. Terraform Design Example
-
+- - Please refer 'Builder_Terraform' directory
 - In Terraform, the Builder Pattern maps to layered module composition — each layer adds one concern at a time, independently and in a deliberate order. 
 - The "build steps" are separate resource blocks or sub-modules that are assembled together by a top-level module acting as the Director.
 
