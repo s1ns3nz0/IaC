@@ -492,7 +492,7 @@ print(db_server.instance_type)      # r5.2xlarge ← clone changed independently
 ## 4) Terraform Design Example
 - The prototype pattern is exposed through `for_each` with a local map
 - You define one `prototype` configuration block, then stamp out as many clones as needed - each with small overrides - without repeating the full resource definition
-- - Please refer 'PrototypeTerraform' directory
+- - Please refer 'Prototype_Terraform' directory
 ## 5) Summary
 ### Terraform Structure
 - The client(`main.tf`) at the top reads the prototype registry via `for_each`.
@@ -652,8 +652,8 @@ custom.describe()
 ---
 
 ### 4. Terraform Design Example
-- - Please refer 'Builder_Terraform' directory
-- In Terraform, the Builder Pattern maps to layered module composition — each layer adds one concern at a time, independently and in a deliberate order. 
+- - Please refer 'Builder`_Terraform' directory
+- In Terraform, the Builder Pattern maps to layered module composition — each layer adds one concern at a time, independently and in a deliberate order.
 - The "build steps" are separate resource blocks or sub-modules that are assembled together by a top-level module acting as the Director.
 
 #### Directory Structure
