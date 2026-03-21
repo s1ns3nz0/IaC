@@ -208,6 +208,7 @@ AFTER (DIP applied):
 - Parses only necesary data from metadata
 - Creates high-level resources such as a server using parsed attributions
 ### Terraform Directories
+- Please refer to `Dependency Injection_Terraform` directory
 ```
 terraform/
   ├── modules/           ← reusable modules (receive dependencies)
@@ -435,6 +436,7 @@ theatre.end_movie()
 # ─────────────────────────────────────────
 ```
 ## 4) Terraform Example
+- Please refer to `Facade_Terraform` directory
 - In Terraform, the Facade Pattern maps to a wrapper module that hides the complexity of multiple sub-modules behind one clean interface. The root (`main.tf`) calls one module with a few simple variables — the facade module internally orchestrates VPC, EC2, RDS, security groups, and everything else.
 - Periodically clean up unused fields to minimize field count.
 #### Directory Structure
@@ -476,3 +478,197 @@ theatre.watch_movie("Inception")  →   module "prod_stack" {
                                         name   = "prod"
                                       }
 ```
+# 5. Adapter Pattern
+## 1) What it is?
+- The Facade Pattern is useful when dependency relationships are simple; however, issues occur when modules become complex.
+- The Adapter pattern is a structural design pattern that acts as a bridge between two incompatible interfaces.
+- Mapping should be used on multiple infrastructure and be reproducable and evolvable
+- The Adapter Pattern converts low-level resource metadata to make it compatible with high-level resources.
+## 2) How it works?
+```
+Your Code                    Third-Party Library
+─────────────────────        ───────────────────
+expects:                     provides:
+  .pay(amount, currency)       .create_charge(amount_cents, currency_lower)
+  .refund(tx_id, amount)       .create_refund(charge_id, amount_cents)
+
+These two can't talk to each other directly ✗
+Different method names, different parameter formats
+```
+```
+Your Code
+  │  calls .pay(19.99, "USD")
+  ▼
+Adapter
+  │  translates:
+  │    19.99  → 1999  (dollars to cents)
+  │    "USD"  → "usd" (uppercase to lowercase)
+  │  calls .create_charge(1999, "usd", source)
+  ▼
+Third-Party Library
+  │  does the actual work
+  ▼
+Adapter
+  │  translates response back
+  │    {"status": "succeeded"} → True
+  ▼
+Your Code receives: True
+```
+## 3) Software Design Pattern Example
+```
+# Third-party service returns XML
+class XMLWeatherService:
+    def get_weather(self):
+        return "<weather><temp>22</temp><city>Seoul</city></weather>"
+
+# Your app expects a dictionary
+class WeatherService:
+    def get_weather(self) -> dict:
+        raise NotImplementedError
+
+# ── Adapter ───────────────────────────────────────────────
+import xml.etree.ElementTree as ET
+
+class XMLWeatherAdapter(WeatherService):
+    def __init__(self, xml_service):
+        self._service = xml_service
+
+    def get_weather(self) -> dict:
+        xml_str = self._service.get_weather()
+        root    = ET.fromstring(xml_str)
+        return {                            # translate XML → dict ✅
+            "temp": root.find("temp").text,
+            "city": root.find("city").text
+        }
+
+weather = XMLWeatherAdapter(XMLWeatherService())
+print(weather.get_weather())   # {"temp": "22", "city": "Seoul"} ✅
+```
+## 4) Terraform Example
+- Please refer to `Adapter_Terraform` directory
+- Multi-Cloud Envrionments
+```
+Your code (environments/prod/main.tf)
+always writes the same thing:
+
+  module "storage" {
+    bucket_name = "my-bucket"
+    versioning  = true
+  }
+
+         │
+         │  change ONE line (source)
+         │
+    ┌────┴────┐
+    ▼          ▼
+s3-adapter   gcs-adapter
+(AWS)        (GCP)
+```
+# 6. Mediator Pattern
+## 1) What it is?
+- The Mediator pattern introduces a central coordinator that handles all communication between objects — so they never talk to each other directly.
+```
+Without Mediator:              With Mediator:
+─────────────────              ──────────────
+A ←──→ B                       A ──→ Mediator ←── B
+A ←──→ C                               │
+A ←──→ D                        ┌──────┼──────┐
+B ←──→ C                        A      B      C
+B ←──→ D                               ↑
+C ←──→ D                       everyone talks
+                                ONLY to Mediator
+Everyone knows everyone        Nobody knows anyone
+Tightly coupled 💀             Loosely coupled ✅
+```
+## 2) How it works?
+- Every interaction in the Mediator pattern follows exactly two steps — no exceptions:
+    + Step 1 — Component notifies the Mediator
+    + Step 2 — Mediator decides what to do
+## 3) Software Design Pattern Example
+### Without Mediator — every object knows every other
+```
+class Button:
+    def __init__(self, textbox, checkbox):
+        self.textbox  = textbox   # knows about textbox
+        self.checkbox = checkbox  # knows about checkbox
+
+    def click(self):
+        self.textbox.clear()      # directly calls textbox
+        self.checkbox.uncheck()   # directly calls checkbox
+
+# Button is tightly coupled to BOTH other components
+# Add a new component → must change Button
+```
+### With Mediator — everyone only talks to mediator ───────
+- Mediator handles: clear textbox + uncheck checkbox
+- Button has no idea what happened ✅
+```
+class Mediator:
+    def __init__(self):
+        self.button   = Button(self)    # passes self as mediator
+        self.textbox  = Textbox(self)
+        self.checkbox = Checkbox(self)
+
+    def notify(self, sender, event):
+        # ALL coordination logic lives here
+        if sender == "button" and event == "click":
+            self.textbox.clear()
+            self.checkbox.uncheck()
+
+        elif sender == "checkbox" and event == "check":
+            self.textbox.enable()
+
+        elif sender == "checkbox" and event == "uncheck":
+            self.textbox.disable()
+
+class Button:
+    def __init__(self, mediator):
+        self._mediator = mediator   # only knows mediator
+
+    def click(self):
+        self._mediator.notify("button", "click")  # just reports ✅
+        # doesn't know what happens next
+
+class Textbox:
+    def __init__(self, mediator):
+        self._mediator = mediator
+
+    def clear(self):
+        print("Textbox cleared")
+
+    def enable(self):
+        print("Textbox enabled")
+
+    def disable(self):
+        print("Textbox disabled")
+
+class Checkbox:
+    def __init__(self, mediator):
+        self._mediator = mediator
+
+    def check(self):
+        self._mediator.notify("checkbox", "check")
+
+    def uncheck(self):
+        print("Checkbox unchecked")
+
+# Usage
+ui = Mediator()
+ui.button.click()
+```
+### 4) Terraform Example`
+- Please refer to `Mediator_Terraform` directory
+```
+networking    knows: nothing about others   produces: vpc_id, subnet_ids
+database      knows: nothing about others   accepts:  vpc_id, subnet_ids
+lambda        knows: nothing about others   accepts:  vpc_id, subnet_ids, table_name
+eks           knows: nothing about others   accepts:  vpc_id, subnet_ids
+
+root main.tf  knows: ALL modules            wires:    outputs → inputs
+(mediator)
+```
+# 7. Decide What To Use
+Pattern selection depends on the complexity of low-level modules and their dependencies:
+- Facade Pattern: Use when a single low-level module depends on multiple high-level modules
+- Adapter Pattern: Use when low-level modules have dependencies on numerous high-level modules
+- Mediator Pattern: Use when complex dependencies exist between multiple modules
