@@ -383,6 +383,24 @@ cache.describe()  # [Cache] cpu=4   mem=16GB  type=m5.xlarge
 ```
 ## 5) Terraform Design Example
 - Please refer 'Factory_Pattern' directory
+### Full Side-by-Side
+```
+PYTHON                                TERRAFORM
+────────────────────────────────────  ────────────────────────────────────
+class ServerFactory:                  # modules/server/main.tf
+  def create(self, type):
+    configs = {                         locals {
+      "web":   WebServer(),               configs = {
+      "db":    DBServer(),                  web   = { instance_type = "t3.medium"  }
+      "cache": CacheServer()                db    = { instance_type = "r5.2xlarge" }
+    }                                       cache = { instance_type = "m5.xlarge"  }
+    return configs[type]                  }
+                                        }
+
+# Client never calls WebServer()       # Client never writes aws_instance {}
+web = factory.create("web")           module "web" { server_type = "web" }
+db  = factory.create("db")            module "db"  { server_type = "db"  }
+```
 ## 6) Summary
 | Concept | Python | Terraform |
 |-----|-----|------|
@@ -391,6 +409,7 @@ cache.describe()  # [Cache] cpu=4   mem=16GB  type=m5.xlarge
 |Client|Code calling `factory.crate()`|Roof `main.tf`|
 |Hidden logic|`self.cpu`, `self.memory`|`instance_type`, `volume_size`|
 |Caller knows|Only the type(`"web"`)|Only `server_type="web"`|
+
 ### Diagram
 ![](terraform_factory_pattern.svg)
 ---
