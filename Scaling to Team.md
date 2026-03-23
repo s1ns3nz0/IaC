@@ -90,3 +90,33 @@ Test environments are isolated from production to enable safe testing and valida
 - Regression Tests are periodically executed during specific periods to verify the states of infrastructures or features matched to expected those values
 ## 8) Test Removal
 - TMaintain clean test suites by removing unreliable tests that fail consistently without indicating actual system failures.
+# 3. Continuous Deployment and Branch Models
+- Infrastructure change management includes detailed deployment and a rollback procedure about change requests
+- Quality gate of IaC enforces security, availability and recovery resilience through review and tests
+## 1) Deploy Changes To Operation Envrionments
+### Continous Integration
+- CI for IaC consistently and periodically verifies changes in test envrionments and merge them to repository
+- Delivery pipeline for IaC represents and automates to build, test, deploy and release workflows of infrastructures changes 
+#### Diagram
+1. Verify whether collision components exist in IaC
+2. Execute unit tests fo verify misconfiguration and wrong formats
+3. Deploy the configurations to test envrionments
+4. Verify configurations by running integration test or end-to-end test in test envrionments
+5. Wait for review of other team or change committee
+5. Release infrastructure changes to operation system
+7. Verify operation configuration by running integration or end-to-end test
+### Choose Delivery Method
+- Recommend integrating Infastructure change management with continuous delivery and deployment
+- Infrastructure standard change is the method to apply common modifications with well-defined activities and roll-back plan 
+- Emergency Change is the modification to quickly fix the feature of operation system
+- Commit record the problem solving phase, Pipeline test the changes before modifications that might ruin system much more automatically applied
+- New or major changes can affect system architecture, security or availability that don't have any well-define deployment plan or roll-back plan 
+#### Delivery Method depending on Infrastructure Change Type
+- After changes and its type, We can decide how to delivery
+| Change Type | Delivery Method | Manual Approve Required | Examples |
+|-------------|-----------------|-------------------------|----------|
+| Standard| Continuous Delivery | No                      |Add servers to autoscaling group|
+| Emergency| Continous Delivery or Manual Change|Roll back ooperation system image to former one|
+| Critical| Continous Delivery| Yes| Apply SSL to all services and infrastructure|
+|New| Continuous Delivery|Yes|Deploy new infrastructure components|
+#### Delivery Method depending on Module Change Type
